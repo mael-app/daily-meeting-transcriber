@@ -1,0 +1,100 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+.env
+.env.*
+.venv
+.venv*/
+venv/
+ENV/
+env/
+venv.bak/
+env.bak/
+
+# Packaging / distribution
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache/
+.pytest_cache/
+coverage.xml
+pytest.xml
+
+# Type checkers / linters
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+.pylint.d/
+.ruff_cache/
+
+# Jupyter/IPython (if any show up later)
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# Logs and local state
+*.log
+*.pid
+*.pid.lock
+
+# Temporary and cache
+.tmp/
+tmp/
+.temp/
+.cache/
+
+# Project-local data/output (safe to keep untracked)
+recordings/
+outputs/
+transcripts/
+data/
+*.mp3
+*.wav
+*.flac
+*.m4a
+
+# OS archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.bz2
+
+# Markdown: ignore all .md except the root README.md
+*.md
+!/README.md
