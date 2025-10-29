@@ -18,7 +18,7 @@ Automatically transcribe and summarize your daily meetings using OpenAI's Whispe
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/daily-meeting-transcriber.git
+git clone https://github.com/mael-app/daily-meeting-transcriber.git
 cd daily-meeting-transcriber
 ```
 
@@ -63,7 +63,7 @@ The generated Markdown includes:
 Edit the filename pattern at the top of the script:
 
 ```python
-OUTPUT_FILENAME_PATTERN = "Daily-{day}-{month}-{year}-HexaTeam.md"
+OUTPUT_FILENAME_PATTERN = "Daily-{day}-{month}-{year}.md"
 ```
 
 ### Custom Prompts
