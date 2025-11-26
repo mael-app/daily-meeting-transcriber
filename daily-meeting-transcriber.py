@@ -4,7 +4,7 @@ import os
 import sys
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import urllib.request
 import urllib.error
@@ -379,70 +379,207 @@ def load_custom_prompts(prompt_file='prompt.json'):
 
 
 def main():
-    """Entry point for the CLI pipeline: transcribe then summarize.
+    """Entry point for the CLI pipeline: transcribe then summarize or envoyer dans Notion."""
+    import argparse
 
-    Parses CLI arguments, loads optional custom prompts, transcribes the audio file
-    using Whisper, generates a structured Markdown summary, and saves it using a
-    date-based filename pattern.
+    parser = argparse.ArgumentParser(description="Transcribe and summarize a daily meeting, output as Markdown or to Notion.")
+    parser.add_argument("audio_file", help="Path to the audio file to transcribe")
+    parser.add_argument("prompt_file", nargs="?", default="prompt.json", help="JSON file for custom prompts (optional)")
+    parser.add_argument("--notion", dest="notion_json", metavar="NOTION_JSON", help="Path to Notion DB schema JSON file (output-notion.json)")
+    parser.add_argument("--notion-category", dest="notion_category", metavar="CATEGORY", help="Value for the Notion 'Category' select field (e.g. Standup)")
+    parser.add_argument("--notion-title", dest="notion_title", metavar="TITLE", help="Title for the Notion page (default: date)")
+    args = parser.parse_args()
 
-    Args:
-        None
+    audio_path = args.audio_file
+    prompt_file = args.prompt_file
+    notion_json_path = args.notion_json
+    notion_category = args.notion_category
+    notion_title = args.notion_title
 
-    Returns:
-        None
-
-    Raises:
-        SystemExit: For invalid CLI usage, missing environment variables, or runtime errors
-        during I/O or API calls.
-    """
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: python script.py <audio_file_path> [prompt_file]")
-        print("Example: python script.py daily_meeting.m4a")
-        print("Example: python script.py daily_meeting.m4a custom_prompt.json")
-        sys.exit(1)
-    
-    audio_path = sys.argv[1]
-    prompt_file = sys.argv[2] if len(sys.argv) == 3 else 'prompt.json'
-    
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
         print("❌ Error: OPENAI_API_KEY environment variable not set")
         print("Set it with: export OPENAI_API_KEY='your-api-key'")
         sys.exit(1)
-    
-    now = datetime.now()
+
+    now_local = datetime.now()
     output_filename = OUTPUT_FILENAME_PATTERN.format(
-        day=now.strftime('%d'),
-        month=now.strftime('%m'),
-        year=now.strftime('%y')
+        day=now_local.strftime('%d'),
+        month=now_local.strftime('%m'),
+        year=now_local.strftime('%y')
     )
-    
+
     custom_system, custom_user, custom_language = load_custom_prompts(prompt_file)
-    
     language = custom_language if custom_language else DEFAULT_LANGUAGE
-    
+
     print(f"🚀 Starting daily meeting transcription pipeline")
     print(f"📁 Input file: {audio_path}")
-    print(f"📄 Output file: {output_filename}")
+    if notion_json_path:
+        print(f"📦 Notion mode enabled, schema: {notion_json_path}")
+    else:
+        print(f"📄 Output file: {output_filename}")
     print(f"🌍 Language: {language}")
     print()
-    
-    transcript = transcribe_audio(audio_path, api_key, language)
-    
-    print()
-    
-    system_prompt = custom_system if custom_system else SYSTEM_PROMPT
-    user_prompt_template = custom_user if custom_user else USER_PROMPT_TEMPLATE
-    
-    summary, tokens = generate_summary_with_prompts(transcript, api_key, system_prompt, user_prompt_template)
-    
-    print()
-    
-    save_summary(summary, output_filename)
-    
-    print()
-    print(f"🎉 Pipeline completed successfully!")
-    print(f"📊 Total tokens consumed: {tokens}")
+
+    # La suite (DRY_RUN, Notion, etc) sera ajoutée dans les étapes suivantes.
+    # Pour l'instant, on garde le pipeline existant si --notion n'est pas utilisé.
+
+    if not notion_json_path:
+        transcript = transcribe_audio(audio_path, api_key, language)
+        print()
+        system_prompt = custom_system if custom_system else SYSTEM_PROMPT
+        user_prompt_template = custom_user if custom_user else USER_PROMPT_TEMPLATE
+        summary, tokens = generate_summary_with_prompts(transcript, api_key, system_prompt, user_prompt_template)
+        print()
+        save_summary(summary, output_filename)
+        print()
+        print(f"🎉 Pipeline completed successfully!")
+        print(f"📊 Total tokens consumed: {tokens}")
+    else:
+        notion_token = os.getenv('NOTION_TOKEN')
+        if not notion_token:
+            print("❌ Error: NOTION_TOKEN environment variable not set")
+            print("Set it with: export NOTION_TOKEN='your-notion-token'")
+            sys.exit(1)
+
+        # Generate the summary
+        transcript = transcribe_audio(audio_path, api_key, language)
+        print()
+        system_prompt = custom_system if custom_system else SYSTEM_PROMPT
+        user_prompt_template = custom_user if custom_user else USER_PROMPT_TEMPLATE
+        summary, tokens = generate_summary_with_prompts(transcript, api_key, system_prompt, user_prompt_template)
+        print()
+
+        # Load the Notion DB schema
+        try:
+            with open(notion_json_path, 'r', encoding='utf-8') as f:
+                notion_schema = json.load(f)
+        except Exception as e:
+            print(f"❌ Error loading Notion schema: {e}")
+            sys.exit(1)
+
+        db_id = notion_schema.get('id') or notion_schema.get('database_id')
+        if not db_id:
+            print("❌ Error: Database ID not found in Notion schema JSON.")
+            sys.exit(1)
+
+        # Prepare properties
+        now_utc = datetime.now(timezone.utc)
+        date_str = now_utc.isoformat(timespec='seconds').replace('+00:00', 'Z')
+        # Dynamic mapping
+        page_title = notion_title if notion_title else f"Daily {now_utc.strftime('%d/%m/%Y %H:%M')}"
+        category = notion_category if notion_category else "Standup"
+
+        properties = {
+            "Name": {
+                "title": [ { "text": { "content": page_title } } ]
+            },
+            "Date": {
+                "date": { "start": date_str }
+            },
+            "Category": {
+                "select": { "name": category }
+            },
+            "Attendees": {
+                "people": []
+            }
+        }
+
+        # Parse markdown into Notion blocks (heading, bulleted_list, paragraph)
+        def markdown_to_notion_blocks(md):
+            blocks = []
+            lines = md.splitlines()
+            i = 0
+            while i < len(lines):
+                line = lines[i].strip()
+                if not line:
+                    i += 1
+                    continue
+                # Checklists: must be detected before bullet lists
+                if line.startswith('- [ ]') or line.startswith('[ ]'):
+                    content = line.replace('- [ ]', '').replace('[ ]', '').strip()
+                    blocks.append({
+                        "object": "block",
+                        "type": "to_do",
+                        "to_do": {
+                            "rich_text": [ { "text": { "content": content } } ],
+                            "checked": False
+                        }
+                    })
+                    i += 1
+                elif line.startswith('### '):
+                    blocks.append({
+                        "object": "block",
+                        "type": "heading_2",
+                        "heading_2": {
+                            "rich_text": [ { "text": { "content": line[4:].strip() } } ]
+                        }
+                    })
+                    i += 1
+                elif line.startswith('- '):
+                    # bulleted list: collect all consecutive - lines (not checklists)
+                    while i < len(lines) and lines[i].strip().startswith('- ') and not (lines[i].strip().startswith('- [ ]')):
+                        item = lines[i].strip()[2:].strip()
+                        blocks.append({
+                            "object": "block",
+                            "type": "bulleted_list_item",
+                            "bulleted_list_item": {
+                                "rich_text": [ { "text": { "content": item } } ]
+                            }
+                        })
+                        i += 1
+                else:
+                    # paragraph
+                    blocks.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [ { "text": { "content": line } } ]
+                        }
+                    })
+                    i += 1
+            return blocks
+
+        children = [
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [ { "text": { "content": "Daily summary" } } ]
+                }
+            }
+        ]
+        children += markdown_to_notion_blocks(summary)
+
+        payload = {
+            "parent": { "database_id": db_id.replace('-', '') },
+            "properties": properties,
+            "children": children
+        }
+
+        headers = {
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {notion_token}"
+        }
+
+        import urllib.request
+        req = urllib.request.Request(
+            url="https://api.notion.com/v1/pages",
+            data=json.dumps(payload).encode(),
+            headers=headers,
+            method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                resp.read()  # Ignore response content
+                print(f"✅ Summary sent to Notion!")
+        except urllib.error.HTTPError as e:
+            print(f"❌ Notion API error ({e.code}): {e.read().decode()}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"❌ Unexpected error during Notion API call: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
