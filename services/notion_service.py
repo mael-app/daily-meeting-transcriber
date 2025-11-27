@@ -6,6 +6,7 @@ NOTION_API_URL = "https://api.notion.com/v1/pages"
 
 
 def markdown_to_notion_blocks(md):
+    # Converts Markdown to Notion blocks
     blocks = []
     lines = md.splitlines()
     i = 0
@@ -48,6 +49,7 @@ def markdown_to_notion_blocks(md):
         else:
             blocks.append({
                 "object": "block",
+                # Default to paragraph block
                 "type": "paragraph",
                 "paragraph": {
                     "rich_text": [{"text": {"content": line}}]
@@ -58,7 +60,7 @@ def markdown_to_notion_blocks(md):
 
 
 def send_to_notion(markdown: str, notion_token: str, notion_db_id: str, category: str, title: str):
-    """Envoie le résumé formaté à Notion."""
+    """Send the formatted summary to Notion."""
     now_utc = datetime.now(timezone.utc)
     date_str = now_utc.isoformat(timespec='seconds').replace('+00:00', 'Z')
     properties = {

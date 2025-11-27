@@ -29,29 +29,28 @@ def create_multipart_form_data(fields, files):
 
 
 def transcribe_audio(audio_path: str, api_key: str, language: str = "fr") -> str:
-    """Transcrit un fichier audio via l'API OpenAI Whisper."""
-    logger.info(f"🎤 Starting audio transcription (language: {language})...")
+    """Transcribes an audio file using the OpenAI Whisper API."""
+    logger.info(f"\U0001F3A4 Starting audio transcription (language: {language})...")
     try:
         with open(audio_path, 'rb') as f:
             audio_content = f.read()
     except FileNotFoundError:
-        logger.error(f"❌ Error: Audio file not found: {audio_path}")
+        logger.error(f"\u274c Error: Audio file not found: {audio_path}")
         sys.exit(1)
     except PermissionError:
-        logger.error(f"❌ Error: Permission denied reading file: {audio_path}")
+        logger.error(f"\u274c Error: Permission denied reading file: {audio_path}")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"❌ Error reading audio file: {e}")
+        logger.error(f"\u274c Error reading audio file: {e}")
         sys.exit(1)
     try:
         file_size = os.path.getsize(audio_path)
         size_mb = file_size / (1024 * 1024)
-        logger.info(f"📦 Audio size: {size_mb:.1f} MB")
+        logger.info(f"\U0001F4E6 Audio size: {size_mb:.1f} MB")
         if size_mb > 24:
-            logger.warning(
-                "⚠️  Heads-up: large file upload. Direct uploads > ~25MB can be slow or fail; consider compressing or trimming.")
-    except (OSError, ValueError) as e:
-        logger.warning(f"⚠️  Could not determine audio file size: {e}")
+            logger.warning("Audio file is larger than 24MB. Whisper API may reject it.")
+    except Exception as e:
+        logger.warning(f"Could not determine audio file size: {e}")
     filename = os.path.basename(audio_path)
     ext = Path(audio_path).suffix.lower()
     if ext == '.mp3':

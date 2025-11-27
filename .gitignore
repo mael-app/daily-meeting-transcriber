@@ -100,3 +100,10 @@ data/
 *.md
 !/README.md
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform.tfvars
+*.auto.tfvars
+
