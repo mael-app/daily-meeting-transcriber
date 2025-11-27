@@ -82,6 +82,7 @@ tmp/
 recordings/
 outputs/
 transcripts/
+output-notion.json
 data/
 *.mp3
 *.wav
@@ -98,3 +99,4 @@ data/
 # Markdown: ignore all .md except the root README.md
 *.md
 !/README.md
+
