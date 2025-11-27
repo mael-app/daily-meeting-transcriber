@@ -1,102 +1,110 @@
 # 🎤 Daily Meeting Transcriber
 
-Automatically transcribe and summarize your daily meetings using OpenAI's Whisper and GPT-4o mini.
+A modern API and CLI tool to transcribe and summarize your daily meetings using OpenAI Whisper and GPT-4o mini, with optional Notion integration.
+
+---
 
 ## Features
 
-- 🎧 Audio transcription with Whisper (supports mp3, m4a, wav, etc.)
-- 🤖 AI-powered structured summary generation
+- 🎧 Audio transcription (Whisper, supports mp3, m4a, wav, etc.)
+- 🤖 AI-powered structured summary generation (GPT-4o mini)
+- 📦 Notion integration: send summaries to your Notion database (optional)
+- 📝 Markdown output
+- 🌍 Multilingual (default: French)
+- 🪄 FastAPI HTTP API (with OpenAPI docs)
+- 🐳 Docker-ready, deployable to Google Cloud Run
 - 📊 Token usage tracking
-- 🇫🇷 Optimized for French meetings
-- 📝 Clean Markdown output
+- 🦄 Colorful logging with Loguru
 
-## Prerequisites
+---
 
-- Python 3.7+
-- OpenAI API key ([get one here](https://platform.openai.com/api-keys))
+## Quickstart
 
-## Installation
+### 1. Clone & Install
 
 ```bash
 git clone https://github.com/mael-app/daily-meeting-transcriber.git
 cd daily-meeting-transcriber
+pip install -r requirements.txt
 ```
 
-No dependencies needed! Uses Python's standard library only.
+### 2. Set Environment Variables
 
-## Usage
+- `OPENAI_API_KEY` (required): Your OpenAI API key
+- `NOTION_JSON` (optional): Path to your Notion DB schema (JSON)
+- `NOTION_CATEGORY`, `NOTION_TITLE` (optional): Notion config
+- `PROMPT_FILE` (optional): Custom prompt file (default: `prompt.json`)
 
-1. Set your OpenAI API key:
+Example:
 ```bash
-export OPENAI_API_KEY='your-api-key-here'
+export OPENAI_API_KEY=sk-...
 ```
 
-2. Run the script:
+### 3. Run with Docker
+
 ```bash
-python daily_transcriber.py path/to/your/meeting.m4a
+docker build -t daily-meeting-transcriber .
+docker run -e OPENAI_API_KEY=sk-... -p 8080:8080 daily-meeting-transcriber
 ```
 
-3. (Optional) Use a custom prompt file:
+### 4. API Usage
+
+- Open [http://localhost:8080/docs](http://localhost:8080/docs) for interactive docs.
+- Main endpoint: `POST /process-audio`
+    - `file`: audio file (required)
+    - `notion_schema`: Notion DB schema (JSON, optional)
+
+Example with `curl`:
 ```bash
-python daily_transcriber.py path/to/your/meeting.m4a custom_prompt.json
+curl -X POST "http://localhost:8080/process-audio" \
+  -F "file=@meeting.m4a" \
+  -F "notion_schema=@output-notion.json"
 ```
 
-4. Get your summary:
-```
-Daily-29-10-25-HexaTeam.md
-```
+### 5. CLI Usage (Python)
 
-## Output Format
+You can also use the core logic in your own scripts by importing the services in `services/`.
 
-The generated Markdown includes:
+---
 
-- **Travail d'hier** - Previous day's accomplishments
-- **Organisation de la journée** - Today's plans and priorities
-- **Revues de code** - PRs to review
-- **Points techniques discutés** - Technical discussions
-- **Action Items** - Follow-up tasks
+## Project Structure
+
+- `app.py` — FastAPI entrypoint
+- `services/` — Core logic (transcription, summary, Notion, audio)
+- `utils/` — Config, env, helpers
+- `requirements.txt` — Python dependencies
+- `Dockerfile` — Production-ready Docker build
+
+---
 
 ## Configuration
 
-### Filename Pattern
+- All environment variables are loaded via `utils/env.py` (use `get_env()`)
+- Custom prompts: put a `prompt.json` file at the root, or set `PROMPT_FILE`
+- Notion integration: pass a Notion DB schema as a file to the API, or set `NOTION_JSON`
 
-Edit the filename pattern at the top of the script:
+---
 
-```python
-OUTPUT_FILENAME_PATTERN = "Daily-{day}-{month}-{year}.md"
-```
+## Example Notion Schema
 
-### Custom Prompts
+See `output-notion.json` for an example of the expected Notion DB schema format.
 
-Create a `prompt.json` file to customize the AI behavior:
+---
 
-```json
-{
-  "system_prompt": "Tu es un assistant chargé de générer un résumé structuré en Markdown d'un compte rendu de daily meeting de développeurs.",
-  "user_prompt": "Analyse le texte fourni...\n\nTranscript du daily meeting :\n---\n{transcript}\n---",
-  "language": "fr"
-}
-```
+## Logging
 
-**Configuration options:**
-- `system_prompt`: Instructions for the AI (optional)
-- `user_prompt`: Template for processing the transcript (optional, must include `{transcript}` placeholder)
-- `language`: Whisper transcription language using [ISO-639-1 codes](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) (optional, default: `fr`)
+- Uses [Loguru](https://github.com/Delgan/loguru) for colorful, structured logs
+- All logs are in English for consistency
 
-**Supported languages:** `en` (English), `es` (Spanish), `de` (German), `it` (Italian), `pt` (Portuguese), `nl` (Dutch), `ja` (Japanese), `zh` (Chinese), and [many more](https://platform.openai.com/docs/guides/speech-to-text).
+---
 
-The script looks for `prompt.json` by default, or you can specify a custom path:
+## Deployment
 
-```bash
-python daily_transcriber.py meeting.m4a my_prompts.json
-```
+- Dockerfile is multi-stage and production-ready
+- Designed for Google Cloud Run (single worker, port 8080)
+- See `.github/workflows/docker-publish.yml` for CI/CD to GitHub Container Registry
 
-## Cost Estimation
-
-- Whisper: ~$0.006 per minute
-- GPT-4o mini: ~$0.15 per 1M input tokens, ~$0.60 per 1M output tokens
-
-A typical 15-minute daily costs ~$0.10-0.15.
+---
 
 ## License
 
