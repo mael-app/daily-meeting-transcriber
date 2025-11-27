@@ -18,7 +18,6 @@ def process_audio_service(file: UploadFile, notion_schema: Optional[UploadFile])
         tmp.write(audio_bytes)
         tmp.flush()
         transcript = transcribe_audio(tmp.name, api_key)
-    # Prompt strings intentionally left in French as per user request
     system_prompt = AppConfig.custom_system if AppConfig.custom_system else "Tu es un assistant chargé de générer un résumé structuré en Markdown d'un compte rendu de daily meeting de développeurs."
     user_prompt_template = AppConfig.custom_user if AppConfig.custom_user else """Analyse le texte fourni, identifie les sujets discutés, les tâches réalisées, les plans de la journée, les points techniques, les blocages éventuels et les actions à suivre.\n\nSuis strictement le format suivant :\n\n### Travail d'hier\n- Liste concise des réalisations de la veille.\n\n### Organisation de la journée\n- Liste des réunions, priorités ou tâches prévues aujourd'hui.\n\n### Revues de code\n- Liste des PR à reviewer ou en attente.\n\n### Points techniques discutés\n- Liste des problèmes, propositions ou réflexions techniques soulevées.\n\n### Action Items\n- Liste à cocher [ ] des prochaines actions identifiées.\n\nRègles :\n- Utilise un ton professionnel et factuel.\n- Ne garde aucune phrase inutile, blague ou digression.\n- Résume de manière claire et synthétique (max 10 lignes par section).\n- Corrige la grammaire et les formulations orales.\n- Si une section n'a aucun contenu, ne l'affiche pas.\n\nTranscript du daily meeting :\n---\n{transcript}\n---"""
     summary, tokens = generate_summary_with_prompts(
@@ -41,17 +40,18 @@ def process_audio_service(file: UploadFile, notion_schema: Optional[UploadFile])
                 "notion_sent": False,
                 "error": f"Invalid Notion schema file: {e}"
             })
-    elif AppConfig.notion_json:
+    else:
+        # Load Notion DB schema from environment variable
+        notion_db_schema = get_env("NOTION_DB_SCHEMA", required=True)
         try:
-            with open(AppConfig.notion_json, 'r', encoding='utf-8') as f:
-                notion_schema_dict = json.load(f)
+            notion_schema_dict = json.loads(notion_db_schema)
         except Exception as e:
             return JSONResponse({
                 "tokens": tokens,
                 "transcript_success": transcript is not None and len(transcript) > 0,
                 "markdown": summary,
                 "notion_sent": False,
-                "error": f"Notion schema file error: {e}"
+                "error": f"Notion DB schema error: {e}"
             })
     if notion_schema_dict:
         db_id = notion_schema_dict.get('id') or notion_schema_dict.get('database_id')
