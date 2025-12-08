@@ -5,6 +5,7 @@ import urllib.error
 import json
 from pathlib import Path
 from loguru import logger
+from pydub import AudioSegment
 
 OPENAI_WHISPER_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
 
@@ -28,39 +29,25 @@ def create_multipart_form_data(fields, files):
     return boundary, b'\r\n'.join(body)
 
 
-def transcribe_audio(audio_path: str, api_key: str, language: str = "fr") -> str:
-    """Transcribes an audio file using the OpenAI Whisper API."""
-    logger.info(f"\U0001F3A4 Starting audio transcription (language: {language})...")
+def transcribe_audio_chunk(audio_path: str, api_key: str, language: str) -> str:
+    """Transcribes a single audio chunk."""
     try:
         with open(audio_path, 'rb') as f:
             audio_content = f.read()
     except FileNotFoundError:
-        logger.error(f"\u274c Error: Audio file not found: {audio_path}")
-        sys.exit(1)
+        logger.error(f"❌ Error: Audio file not found: {audio_path}")
+        return ""
     except PermissionError:
-        logger.error(f"\u274c Error: Permission denied reading file: {audio_path}")
-        sys.exit(1)
+        logger.error(f"❌ Error: Permission denied reading file: {audio_path}")
+        return ""
     except Exception as e:
-        logger.error(f"\u274c Error reading audio file: {e}")
-        sys.exit(1)
-    try:
-        file_size = os.path.getsize(audio_path)
-        size_mb = file_size / (1024 * 1024)
-        logger.info(f"\U0001F4E6 Audio size: {size_mb:.1f} MB")
-        if size_mb > 24:
-            logger.warning("Audio file is larger than 24MB. Whisper API may reject it.")
-    except Exception as e:
-        logger.warning(f"Could not determine audio file size: {e}")
+        logger.error(f"❌ Error reading audio file: {e}")
+        return ""
+
     filename = os.path.basename(audio_path)
     ext = Path(audio_path).suffix.lower()
-    if ext == '.mp3':
-        content_type = 'audio/mpeg'
-    elif ext in ('.m4a', '.mp4'):
-        content_type = 'audio/mp4'
-    elif ext == '.wav':
-        content_type = 'audio/wav'
-    else:
-        content_type = 'application/octet-stream'
+    content_type = f'audio/{ext.strip(".")}'
+
     boundary, body = create_multipart_form_data(
         fields={'model': 'whisper-1', 'language': language},
         files={'file': (filename, audio_content, content_type)}
@@ -69,7 +56,7 @@ def transcribe_audio(audio_path: str, api_key: str, language: str = "fr") -> str
         'Authorization': f'Bearer {api_key}',
         'Content-Type': f'multipart/form-data; boundary={boundary}'
     }
-    import time, socket
+
     try:
         request = urllib.request.Request(
             OPENAI_WHISPER_ENDPOINT,
@@ -77,30 +64,59 @@ def transcribe_audio(audio_path: str, api_key: str, language: str = "fr") -> str
             headers=headers,
             method='POST'
         )
-        start_time = time.time()
-        logger.info("⏱️Transcribing...")
         with urllib.request.urlopen(request, timeout=600) as response:
             result = json.loads(response.read().decode())
-            transcript = result.get('text', '')
-            elapsed_time = time.time() - start_time
-            logger.success(f"✅ Transcription completed in {elapsed_time:.1f}s")
-            logger.info(f"📊 Transcript length: {len(transcript)} characters")
-            return transcript
+            return result.get('text', '')
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
-        if e.code == 401:
-            logger.error("❌ Error: Invalid OpenAI API key (401 Unauthorized)")
-        elif e.code == 429:
-            logger.error("❌ Error: Rate limit exceeded or quota reached (429)")
-        else:
-            logger.error(f"❌ OpenAI API error ({e.code}): {error_body}")
-        sys.exit(1)
-    except socket.timeout:
-        logger.error("❌ Network timeout while uploading/transcribing (increase timeout or check connectivity)")
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        logger.error(f"❌ Network error: {e.reason}")
-        sys.exit(1)
+        logger.error(f"❌ OpenAI API error ({e.code}): {error_body}")
+        return ""
     except Exception as e:
         logger.error(f"❌ Unexpected error during transcription: {e}")
-        sys.exit(1)
+        return ""
+
+
+def transcribe_audio(audio_path: str, api_key: str, language: str = "fr") -> str:
+    """Transcribes an audio file using the OpenAI Whisper API, splitting it into chunks if necessary."""
+    logger.info(f"🎤 Starting audio transcription (language: {language})...")
+
+    file_size = os.path.getsize(audio_path)
+    size_mb = file_size / (1024 * 1024)
+    logger.info(f"📦 Audio size: {size_mb:.1f} MB")
+
+    max_size = 24 * 1024 * 1024
+    if file_size < max_size:
+        logger.info("Audio file is smaller than 24MB, transcribing directly.")
+        return transcribe_audio_chunk(audio_path, api_key, language)
+
+    logger.warning("Audio file is larger than 24MB. Splitting into chunks...")
+    
+    audio = AudioSegment.from_file(audio_path)
+    
+    # Calculate chunk size to be around 24MB
+    duration_ms = len(audio)
+    chunk_size_ms = int((max_size / file_size) * duration_ms)
+    
+    chunks = [audio[i:i + chunk_size_ms] for i in range(0, duration_ms, chunk_size_ms)]
+    
+    full_transcript = ""
+    temp_files = []
+
+    for i, chunk in enumerate(chunks):
+        chunk_path = f"/tmp/chunk_{i}.mp3"
+        logger.info(f"Transcribing chunk {i + 1}/{len(chunks)}...")
+        chunk.export(chunk_path, format="mp3")
+        temp_files.append(chunk_path)
+        
+        transcript_chunk = transcribe_audio_chunk(chunk_path, api_key, language)
+        if transcript_chunk:
+            full_transcript += transcript_chunk + " "
+        
+    for temp_file in temp_files:
+        try:
+            os.remove(temp_file)
+        except OSError as e:
+            logger.error(f"Error removing temporary file {temp_file}: {e}")
+
+    logger.success("✅ Transcription completed.")
+    return full_transcript.strip()
