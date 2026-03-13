@@ -1,31 +1,57 @@
-# --- FastAPI server version ---
+from dotenv import load_dotenv
+load_dotenv()
 
-from loguru import logger
 import sys
+import logging
+from contextlib import asynccontextmanager
+from loguru import logger
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import RedirectResponse
 from typing import Optional
 from services.audio_service import process_audio_service
 
+
+# Route standard logging (uvicorn, etc.) through loguru
+class _InterceptHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+        frame, depth = sys._getframe(6), 6
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+
+logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
+
+logger.remove()
+logger.add(
+    sys.stdout,
+    colorize=True,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 Daily Meeting Transcriber started")
+    yield
+
+
 app = FastAPI(
     title="Daily Meeting Transcriber API",
     description="API to transcribe and summarize daily meeting audio files. Interactive documentation available at /docs.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
-
-logger.remove()
-logger.add(sys.stdout, colorize=True,
-           format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
-
-logger.info("🚀 Application started with Loguru !")
 
 
 @app.get("/health", summary="Healthcheck", tags=["Health"])
 async def healthcheck():
-    """
-    Check if the API is alive.
-    Returns status 200 and a simple message.
-    """
+    """Check if the API is alive. Returns status 200 and a simple message."""
     return {"status": "ok"}
 
 

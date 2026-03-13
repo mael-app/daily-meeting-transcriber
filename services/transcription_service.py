@@ -1,11 +1,11 @@
 import os
+import subprocess
 import tempfile
 import urllib.request
 import urllib.error
 import json
 from pathlib import Path
 from loguru import logger
-from pydub import AudioSegment
 from utils.config import AppConfig
 
 
@@ -26,6 +26,35 @@ def create_multipart_form_data(fields, files):
     body.append(f'--{boundary}--'.encode())
     body.append(b'')
     return boundary, b'\r\n'.join(body)
+
+
+def _get_audio_duration(audio_path: str) -> float:
+    """Returns audio duration in seconds using ffprobe."""
+    result = subprocess.run(
+        ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'json', audio_path],
+        capture_output=True,
+        text=True
+    )
+    return float(json.loads(result.stdout)['format']['duration'])
+
+
+def _split_audio(audio_path: str, chunk_duration: float, tmp_dir: str) -> list:
+    """Splits audio into chunks of chunk_duration seconds using ffmpeg."""
+    total_duration = _get_audio_duration(audio_path)
+    chunks = []
+    start = 0.0
+    i = 0
+    while start < total_duration:
+        chunk_path = os.path.join(tmp_dir, f"chunk_{i}.mp3")
+        subprocess.run(
+            ['ffmpeg', '-i', audio_path, '-ss', str(start), '-t', str(chunk_duration),
+             '-acodec', 'mp3', '-y', chunk_path],
+            capture_output=True
+        )
+        chunks.append(chunk_path)
+        start += chunk_duration
+        i += 1
+    return chunks
 
 
 def transcribe_audio_chunk(audio_path: str, api_key: str, language: str) -> str:
@@ -80,8 +109,7 @@ def transcribe_audio(audio_path: str, api_key: str, language: str = "en") -> str
     logger.info(f"🎤 Starting audio transcription (language: {language})...")
 
     file_size = os.path.getsize(audio_path)
-    size_mb = file_size / (1024 * 1024)
-    logger.info(f"📦 Audio size: {size_mb:.1f} MB")
+    logger.info(f"📦 Audio size: {file_size / (1024 * 1024):.1f} MB")
 
     max_size = 24 * 1024 * 1024
     if file_size < max_size:
@@ -89,23 +117,15 @@ def transcribe_audio(audio_path: str, api_key: str, language: str = "en") -> str
         return transcribe_audio_chunk(audio_path, api_key, language)
 
     logger.warning("Audio file is larger than 24MB. Splitting into chunks...")
-    
-    audio = AudioSegment.from_file(audio_path)
-    
-    # Calculate chunk size to be around 24MB
-    duration_ms = len(audio)
-    chunk_size_ms = int((max_size / file_size) * duration_ms)
-    
-    chunks = [audio[i:i + chunk_size_ms] for i in range(0, duration_ms, chunk_size_ms)]
-    
+
+    total_duration = _get_audio_duration(audio_path)
+    chunk_duration = (max_size / file_size) * total_duration
     full_transcript = ""
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        for i, chunk in enumerate(chunks):
-            chunk_path = os.path.join(tmp_dir, f"chunk_{i}.mp3")
+        chunks = _split_audio(audio_path, chunk_duration, tmp_dir)
+        for i, chunk_path in enumerate(chunks):
             logger.info(f"Transcribing chunk {i + 1}/{len(chunks)}...")
-            chunk.export(chunk_path, format="mp3")
-
             transcript_chunk = transcribe_audio_chunk(chunk_path, api_key, language)
             if transcript_chunk:
                 full_transcript += transcript_chunk + " "

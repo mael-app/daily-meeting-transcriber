@@ -37,6 +37,8 @@ A FastAPI service to transcribe and summarize your daily meetings using OpenAI W
 ```bash
 git clone https://github.com/mael-app/daily-meeting-transcriber.git
 cd daily-meeting-transcriber
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
