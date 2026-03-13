@@ -98,4 +98,5 @@ data/
 # Markdown: ignore all .md except the root README.md
 *.md
 !/README.md
+!/CONTRIBUTING.md
 

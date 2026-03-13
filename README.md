@@ -4,6 +4,20 @@ A FastAPI service to transcribe and summarize your daily meetings using OpenAI W
 
 ---
 
+## Table of Contents
+
+- [Features](#features)
+- [Quickstart](#quickstart)
+- [Notion Integration](#notion-integration)
+- [Custom Prompts](#custom-prompts)
+- [OpenAI-compatible platforms](#openai-compatible-platforms)
+- [Project Structure](#project-structure)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
 ## Features
 
 - 🎧 Audio transcription via OpenAI Whisper (mp3, m4a, wav, and any format supported by ffmpeg)
@@ -211,6 +225,12 @@ The CI/CD pipeline (`.github/workflows/docker-publish.yml`) builds a multi-arch 
 
 ---
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
 ## License
 
-MIT
+See [LICENSE](LICENSE).
