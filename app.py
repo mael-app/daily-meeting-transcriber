@@ -25,7 +25,7 @@ class _InterceptHandler(logging.Handler):
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 
-logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
+logging.basicConfig(handlers=[_InterceptHandler()], level=logging.INFO, force=True)
 
 logger.remove()
 logger.add(
