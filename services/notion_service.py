@@ -1,8 +1,9 @@
 import json
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone
-
-NOTION_API_URL = "https://api.notion.com/v1/pages"
+from loguru import logger
+from utils.config import AppConfig
 
 
 def markdown_to_notion_blocks(md):
@@ -58,7 +59,7 @@ def markdown_to_notion_blocks(md):
 
 
 def send_to_notion(markdown: str, notion_token: str, notion_db_id: str, category: str, title: str):
-    """Envoie le résumé formaté à Notion."""
+    """Sends the formatted summary to Notion."""
     now_utc = datetime.now(timezone.utc)
     date_str = now_utc.isoformat(timespec='seconds').replace('+00:00', 'Z')
     properties = {
@@ -80,7 +81,7 @@ def send_to_notion(markdown: str, notion_token: str, notion_db_id: str, category
             "object": "block",
             "type": "heading_2",
             "heading_2": {
-                "rich_text": [{"text": {"content": "Daily summary"}}]
+                "rich_text": [{"text": {"content": "Daily Summary"}}]
             }
         }
     ]
@@ -96,7 +97,7 @@ def send_to_notion(markdown: str, notion_token: str, notion_db_id: str, category
         "Authorization": f"Bearer {notion_token}"
     }
     req = urllib.request.Request(
-        url=NOTION_API_URL,
+        url=AppConfig.notion_api_url,
         data=json.dumps(payload).encode(),
         headers=headers,
         method="POST"
@@ -105,8 +106,9 @@ def send_to_notion(markdown: str, notion_token: str, notion_db_id: str, category
         with urllib.request.urlopen(req, timeout=30) as resp:
             resp.read()
     except urllib.error.HTTPError as e:
-        print(f"❌ Notion API error ({e.code}): {e.read().decode()}")
-        exit(1)
+        error_body = e.read().decode()
+        logger.error(f"❌ Notion API error ({e.code}): {error_body}")
+        raise RuntimeError(f"Notion API returned HTTP {e.code}") from e
     except Exception as e:
-        print(f"❌ Unexpected error during Notion API call: {e}")
-        exit(1)
+        logger.error(f"❌ Unexpected error during Notion API call: {e}")
+        raise

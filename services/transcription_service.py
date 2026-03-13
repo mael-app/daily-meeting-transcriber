@@ -1,13 +1,12 @@
 import os
-import sys
+import tempfile
 import urllib.request
 import urllib.error
 import json
 from pathlib import Path
 from loguru import logger
 from pydub import AudioSegment
-
-OPENAI_WHISPER_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
+from utils.config import AppConfig
 
 
 def create_multipart_form_data(fields, files):
@@ -49,7 +48,7 @@ def transcribe_audio_chunk(audio_path: str, api_key: str, language: str) -> str:
     content_type = f'audio/{ext.strip(".")}'
 
     boundary, body = create_multipart_form_data(
-        fields={'model': 'whisper-1', 'language': language},
+        fields={'model': AppConfig.whisper_model, 'language': language},
         files={'file': (filename, audio_content, content_type)}
     )
     headers = {
@@ -59,7 +58,7 @@ def transcribe_audio_chunk(audio_path: str, api_key: str, language: str) -> str:
 
     try:
         request = urllib.request.Request(
-            OPENAI_WHISPER_ENDPOINT,
+            AppConfig.openai_whisper_endpoint,
             data=body,
             headers=headers,
             method='POST'
@@ -76,7 +75,7 @@ def transcribe_audio_chunk(audio_path: str, api_key: str, language: str) -> str:
         return ""
 
 
-def transcribe_audio(audio_path: str, api_key: str, language: str = "fr") -> str:
+def transcribe_audio(audio_path: str, api_key: str, language: str = "en") -> str:
     """Transcribes an audio file using the OpenAI Whisper API, splitting it into chunks if necessary."""
     logger.info(f"🎤 Starting audio transcription (language: {language})...")
 
@@ -100,23 +99,16 @@ def transcribe_audio(audio_path: str, api_key: str, language: str = "fr") -> str
     chunks = [audio[i:i + chunk_size_ms] for i in range(0, duration_ms, chunk_size_ms)]
     
     full_transcript = ""
-    temp_files = []
 
-    for i, chunk in enumerate(chunks):
-        chunk_path = f"/tmp/chunk_{i}.mp3"
-        logger.info(f"Transcribing chunk {i + 1}/{len(chunks)}...")
-        chunk.export(chunk_path, format="mp3")
-        temp_files.append(chunk_path)
-        
-        transcript_chunk = transcribe_audio_chunk(chunk_path, api_key, language)
-        if transcript_chunk:
-            full_transcript += transcript_chunk + " "
-        
-    for temp_file in temp_files:
-        try:
-            os.remove(temp_file)
-        except OSError as e:
-            logger.error(f"Error removing temporary file {temp_file}: {e}")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        for i, chunk in enumerate(chunks):
+            chunk_path = os.path.join(tmp_dir, f"chunk_{i}.mp3")
+            logger.info(f"Transcribing chunk {i + 1}/{len(chunks)}...")
+            chunk.export(chunk_path, format="mp3")
+
+            transcript_chunk = transcribe_audio_chunk(chunk_path, api_key, language)
+            if transcript_chunk:
+                full_transcript += transcript_chunk + " "
 
     logger.success("✅ Transcription completed.")
     return full_transcript.strip()

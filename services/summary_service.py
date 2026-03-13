@@ -1,11 +1,10 @@
 import json
 import urllib.request
 import urllib.error
-import time
 import socket
+import time
 from loguru import logger
-
-OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+from utils.config import AppConfig
 
 
 def generate_summary_with_prompts(transcript: str, api_key: str, system_prompt: str, user_prompt_template: str):
@@ -13,7 +12,7 @@ def generate_summary_with_prompts(transcript: str, api_key: str, system_prompt: 
     logger.info("\U0001F916 Generating structured summary...")
     user_prompt = user_prompt_template.format(transcript=transcript)
     payload = {
-        "model": "gpt-4o-mini",
+        "model": AppConfig.chat_model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -26,13 +25,12 @@ def generate_summary_with_prompts(transcript: str, api_key: str, system_prompt: 
     }
     try:
         request = urllib.request.Request(
-            OPENAI_CHAT_ENDPOINT,
+            AppConfig.openai_chat_endpoint,
             data=json.dumps(payload).encode(),
             headers=headers,
             method='POST'
         )
         start_time = time.time()
-        logger.info("⏱️  Generating summary...")
         with urllib.request.urlopen(request, timeout=180) as response:
             result = json.loads(response.read().decode())
             summary = result['choices'][0]['message']['content']
@@ -43,7 +41,6 @@ def generate_summary_with_prompts(transcript: str, api_key: str, system_prompt: 
             elapsed_time = time.time() - start_time
             logger.success(f"✅ Summary generated in {elapsed_time:.1f}s")
             logger.info(f"📊 Tokens used: {total_tokens} (prompt: {prompt_tokens}, completion: {completion_tokens})")
-            logger.info(f"⏱️  Generating: {elapsed_time:.1f}s")
             return summary, total_tokens
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
@@ -63,10 +60,3 @@ def generate_summary_with_prompts(transcript: str, api_key: str, system_prompt: 
     except Exception as e:
         logger.error(f"❌ Unexpected error during summary generation: {e}")
         return "", 0
-
-
-def generate_summary(transcript: str, api_key: str):
-    """Wrapper with default prompts."""
-    system_prompt = "You are an assistant tasked with generating a structured Markdown summary of a developer daily meeting report."
-    user_prompt_template = """Analyze the provided text, identify the topics discussed, the tasks completed, the plans for the day, the technical points, any potential blockers, and the follow-up actions.\n\nStrictly follow the format below:\n\n### Work from yesterday\n- Concise list of yesterday's achievements.\n\n### Today's organization\n- List of meetings, priorities, or tasks planned for today.\n\n### Code reviews\n- List of PRs to review or pending.\n\n### Technical points discussed\n- List of problems, proposals, or technical reflections raised.\n\n### Action Items\n- Checklist [ ] of the next identified actions.\n\nRules:\n- Use a professional and factual tone.\n- Do not keep any useless phrases, jokes, or digressions.\n- Summarize clearly and succinctly (max 10 lines per section).\n- Correct grammar and spoken formulations.\n- If a section has no content, do not display it.\n\nTranscript of the daily meeting:\n---\n{transcript}\n---"""
-    return generate_summary_with_prompts(transcript, api_key, system_prompt, user_prompt_template)
